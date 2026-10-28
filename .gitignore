@@ -1,0 +1,43 @@
+
+# Dependencies
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Build output
+.next/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Logs
+npm-debug.log*
+*.log
+
+# Local generated files
+backend/generated/
+
+# Unrelated interview preparation files
+/output/
+/tmp/
+
+# Backup Docker configuration - review before publishing
+/docker-compose.yml.backup
+
+
+# Backups of nested Git metadata
+backend/.git.backup/
+frontend/.git.backup/
+
+backend/package-lock.json.backup
+
+frontend/app/page-backup.tsx
