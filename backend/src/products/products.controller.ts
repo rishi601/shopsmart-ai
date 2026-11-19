@@ -48,13 +48,30 @@ export class ProductsController {
     });
   }
 
-  @Get('recommendations')
-  recommendations(@Query('interest') interest?: string) {
-    if (interest && !['gadgets', 'fitness', 'fashion'].includes(interest)) {
-      throw new BadRequestException('interest must be gadgets, fitness, or fashion.');
-    }
-    return this.productsService.recommend(interest ?? 'gadgets');
+  
+@Get('recommendations')
+recommendations(@Query('interest') interest?: string) {
+  const allowedInterests = [
+    'gadgets',
+    'fitness',
+    'fashion',
+    'home',
+    'home & kitchen',
+    'beauty',
+    'accessories',
+  ];
+
+  if (interest && !allowedInterests.includes(interest.trim().toLowerCase())) {
+    throw new BadRequestException(
+      'interest must be gadgets, fitness, fashion, home, beauty, or accessories.',
+    );
   }
+
+  return this.productsService.recommend(
+    interest?.trim().toLowerCase() ?? 'gadgets',
+  );
+}
+
 
   @Get('categories')
   categories() {

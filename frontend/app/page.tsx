@@ -21,7 +21,13 @@ type CartItem = Product & {
 type User = { id: string; name: string; email: string; role: "ADMIN" | "CUSTOMER" };
 type Address = { id: string; recipient: string; line1: string; city: string; region: string; postalCode: string; isDefault: boolean };
 
-type Interest = "gadgets" | "fitness" | "fashion";
+type Interest =
+  | "gadgets"
+  | "fitness"
+  | "fashion"
+  | "home"
+  | "beauty"
+  | "accessories";
 
 declare global {
   interface Window {
@@ -51,6 +57,7 @@ const productEmojis: Record<string, string> = {
   "Running Shoes": "👟",
 };
 
+
 const interestOptions: {
   id: Interest;
   label: string;
@@ -65,47 +72,67 @@ const interestOptions: {
   },
   {
     id: "fitness",
-    label: "Fitness",
+    label: "Fitness & Sports",
     emoji: "🏃",
-    description: "Fitness tracking and active lifestyle",
+    description: "Fitness equipment and sports products",
   },
   {
     id: "fashion",
     label: "Fashion",
-    emoji: "👟",
-    description: "Style and everyday wear",
+    emoji: "👕",
+    description: "Clothing, shoes and everyday style",
+  },
+  {
+    id: "home",
+    label: "Home & Kitchen",
+    emoji: "🏠",
+    description: "Products for your home and kitchen",
+  },
+  {
+    id: "beauty",
+    label: "Beauty & Personal Care",
+    emoji: "✨",
+    description: "Beauty and personal care products",
+  },
+  {
+    id: "accessories",
+    label: "Accessories",
+    emoji: "🎒",
+    description: "Bags, watches and everyday accessories",
   },
 ];
+
+
 
 function matchesInterest(product: Product, interest: Interest) {
   const name = product.name.toLowerCase();
   const category = product.category.toLowerCase();
 
   if (interest === "gadgets") {
-    return (
-      category === "electronics" ||
-      name.includes("headphone") ||
-      name.includes("watch") ||
-      name.includes("gadget")
-    );
+    return category === "electronics";
   }
 
   if (interest === "fitness") {
-    return (
-      name.includes("watch") ||
-      name.includes("running") ||
-      name.includes("fitness") ||
-      name.includes("sports") ||
-      name.includes("gym")
-    );
+    return category === "fitness & sports";
   }
 
-  return (
-    category === "fashion" ||
-    name.includes("shoe") ||
-    name.includes("clothing") ||
-    name.includes("fashion")
-  );
+  if (interest === "fashion") {
+    return category === "fashion";
+  }
+
+  if (interest === "home") {
+    return category === "home & kitchen";
+  }
+
+  if (interest === "beauty") {
+    return category === "beauty & personal care";
+  }
+
+  if (interest === "accessories") {
+    return category === "accessories";
+  }
+
+  return false;
 }
 
 function ReviewEditor({ token, productId, productName, onSaved }: { token: string; productId: number; productName: string; onSaved: () => void }) {
@@ -211,12 +238,15 @@ useEffect(() => {
     const savedCart = localStorage.getItem("shopsmart-cart");
 
     if (
-      savedInterest === "gadgets" ||
-      savedInterest === "fitness" ||
-      savedInterest === "fashion"
-    ) {
-      setInterest(savedInterest);
-    }
+  savedInterest === "gadgets" ||
+  savedInterest === "fitness" ||
+  savedInterest === "fashion" ||
+  savedInterest === "home" ||
+  savedInterest === "beauty" ||
+  savedInterest === "accessories"
+) {
+  setInterest(savedInterest);
+}
 
     if (savedCart) {
       const parsedCart: unknown = JSON.parse(savedCart);
@@ -315,12 +345,22 @@ useEffect(() => {
     });
   }, [products, search, category]);
 
-  useEffect(() => {
-    const route = token ? "/recommendations/me" : "/recommendations";
-    api<{ items: Product[] }>(`${route}?interest=${interest}`, token || undefined)
-      .then((result) => setRecommendations(result.items.map((item) => ({ ...item, price: Number(item.price) }))))
-      .catch(() => setRecommendations([]));
-  }, [interest, token]);
+  
+useEffect(() => {
+  api<{ items: Product[] }>(
+    `/products/recommendations?interest=${encodeURIComponent(interest)}`,
+    token || undefined
+  )
+    .then((result) =>
+      setRecommendations(
+        result.items.map((item) => ({
+          ...item,
+          price: Number(item.price),
+        }))
+      )
+    )
+    .catch(() => setRecommendations([]));
+}, [interest, token]);
 
   useEffect(() => {
     api<Product[]>("/products/trending").then((items) => setTrendingProducts(items.map((item) => ({ ...item, price: Number(item.price) })))).catch(() => setTrendingProducts([]));
@@ -646,7 +686,7 @@ useEffect(() => {
           Choose your interests to see products that match your preferences.
         </p>
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-3">
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {interestOptions.map((option) => (
             <button
               key={option.id}
@@ -704,9 +744,21 @@ useEffect(() => {
                 key={product.id}
                 className="flex items-center gap-4 rounded-2xl border border-blue-100 bg-white p-5 shadow-sm"
               >
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-3xl">
-                  {productEmojis[product.name] || "📦"}
-                </div>
+                
+<div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-blue-50">
+  {product.image ? (
+    <img
+      src={product.image}
+      alt={product.name}
+      className="h-full w-full object-cover"
+    />
+  ) : (
+    <span className="text-3xl">
+      {productEmojis[product.name] || "📦"}
+    </span>
+  )}
+</div>
+
 
                 <div className="min-w-0 flex-1">
                   <p className="font-bold">{product.name}</p>
