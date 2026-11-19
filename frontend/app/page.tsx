@@ -164,6 +164,7 @@ export default function Home() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [token, setToken] = useState("");
@@ -174,6 +175,8 @@ export default function Home() {
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [accountOpen, setAccountOpen] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
+  const [wishlistOpen, setWishlistOpen] = useState(false);
   const [detail, setDetail] = useState<Product | null>(null);
   const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
   const [frequentlyBought, setFrequentlyBought] = useState<Product[]>([]);
@@ -202,30 +205,76 @@ export default function Home() {
   }
 
   useEffect(() => {
-    const controller = new AbortController();
-    async function loadProducts() {
-      const query = new URLSearchParams({ page: String(page), limit: "9", sort: sortBy, order: sortOrder });
-      if (search.trim()) query.set("q", search.trim());
-      if (category !== "All") query.set("category", category);
+  const controller = new AbortController();
+
+  async function loadProducts() {
+    const query = new URLSearchParams({
+      page: String(page),
+      limit: "9",
+      sort: sortBy,
+      order: sortOrder,
+    });
+
+    if (search.trim()) query.set("q", search.trim());
+    if (category !== "All") query.set("category", category);
+
+    if (page === 1) {
       setLoading(true);
-      try {
-        const response = await fetch(`${API_BASE}/products/catalog?${query.toString()}`, { signal: controller.signal });
-        if (!response.ok) throw new Error("Could not load products.");
-        const result: { items: Product[]; pagination: { pages: number } } = await response.json();
-        setProducts(result.items.map((product) => ({ ...product, price: Number(product.price) })));
-        setTotalPages(Math.max(1, result.pagination.pages));
-        setError("");
-      } catch (reason) {
-        if (reason instanceof DOMException && reason.name === "AbortError") return;
-        setError(reason instanceof Error ? reason.message : "Could not connect to the backend.");
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
+    } else {
+      setLoadingMore(true);
     }
 
-    loadProducts();
-    return () => controller.abort();
-  }, [search, category, sortBy, sortOrder, page]);
+    try {
+      const response = await fetch(
+        `${API_BASE}/products/catalog?${query.toString()}`,
+        { signal: controller.signal }
+      );
+
+      if (!response.ok) {
+        throw new Error("Could not load products.");
+      }
+
+      const result: {
+        items: Product[];
+        pagination: { pages: number };
+      } = await response.json();
+
+      const newProducts = result.items.map((product) => ({
+        ...product,
+        price: Number(product.price),
+      }));
+
+      setProducts((current) =>
+        page === 1 ? newProducts : [...current, ...newProducts]
+      );
+
+      setTotalPages(Math.max(1, result.pagination.pages));
+      setError("");
+    } catch (reason) {
+      if (reason instanceof DOMException && reason.name === "AbortError") {
+        return;
+      }
+
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not connect to the backend."
+      );
+    } finally {
+      if (!controller.signal.aborted) {
+        if (page === 1) {
+          setLoading(false);
+        } else {
+          setLoadingMore(false);
+        }
+      }
+    }
+  }
+
+  loadProducts();
+
+  return () => controller.abort();
+}, [search, category, sortBy, sortOrder, page]);
 
   useEffect(() => {
     api<string[]>("/products/categories").then(setCategoryOptions).catch(() => setCategoryOptions([]));
@@ -533,17 +582,380 @@ useEffect(() => {
             ShopSmart<span className="text-blue-600"> AI</span>
           </a>
 
-          <div className="flex items-center gap-3 text-sm font-semibold">
-            {user?.role === "ADMIN" && <a href="/admin" className="rounded-lg bg-indigo-50 px-3 py-2 text-indigo-700">Admin</a>}
-            {user ? <button onClick={() => setAccountOpen(!accountOpen)} className="rounded-lg border px-3 py-2">{user.name.split(" ")[0]}</button> : <button onClick={() => { setAuthMode("login"); setAuthOpen(true); }} className="rounded-lg border px-3 py-2">Sign in</button>}
-            <button onClick={() => setAccountOpen(!accountOpen)} className="rounded-lg border px-3 py-2" aria-label="Open account and wishlist">♡{wishlist.length ? ` ${wishlist.length}` : ""}</button>
-            🛒 Cart: {cart.reduce((sum, item) => sum + item.quantity, 0)} item{cart.reduce((sum, item) => sum + item.quantity, 0) === 1 ? "" : "s"}
-            <span className="ml-2 text-blue-700">
-              ₹{cartTotal.toLocaleString("en-IN")}
-            </span>
-          </div>
+         <div className="flex items-center gap-2 text-sm font-semibold">
+  {user?.role === "ADMIN" && (
+    <a href="/admin" className="rounded-lg bg-indigo-50 px-3 py-2 text-indigo-700">
+      Admin
+    </a>
+  )}
+
+  <button
+    type="button"
+    onClick={() => setWishlistOpen(true)}
+    className="rounded-xl border px-3 py-2 hover:bg-rose-50"
+  >
+    ♡ Wishlist ({wishlist.length})
+  </button>
+
+  <button
+    type="button"
+    onClick={() => setCartOpen(true)}
+    className="rounded-xl border px-3 py-2 hover:bg-blue-50"
+  >
+    🛒 Cart ({cart.reduce((sum, item) => sum + item.quantity, 0)})
+  </button>
+
+  {user ? (
+    <button
+      onClick={() => setAccountOpen(!accountOpen)}
+      className="rounded-lg border px-3 py-2"
+    >
+      {user.name.split(" ")[0]}
+    </button>
+  ) : (
+    <button
+      onClick={() => {
+        setAuthMode("login");
+        setAuthOpen(true);
+      }}
+      className="rounded-lg border px-3 py-2"
+    >
+      Sign in
+    </button>
+  )}
+</div>
         </div>
       </header>
+      
+{/* CART AND WISHLIST DRAWER */}
+{(cartOpen || wishlistOpen) && (
+  <div
+    className="fixed inset-0 z-50 bg-slate-950/50"
+    onMouseDown={(event) => {
+      if (event.target === event.currentTarget) {
+        setCartOpen(false);
+        setWishlistOpen(false);
+      }
+    }}
+  >
+    <aside className="ml-auto flex h-full w-full max-w-lg flex-col overflow-hidden bg-white shadow-2xl">
+      {/* Drawer Header */}
+      <div className="flex items-center justify-between border-b p-5">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-blue-600">
+            ShopSmart AI
+          </p>
+          <h2 className="mt-1 text-2xl font-extrabold">
+            {cartOpen ? "Your Shopping Cart" : "My Wishlist"}
+          </h2>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setCartOpen(false);
+            setWishlistOpen(false);
+          }}
+          className="rounded-full border px-3 py-1 text-2xl hover:bg-slate-100"
+          aria-label="Close panel"
+        >
+          ×
+        </button>
+      </div>
+
+      {/* CART CONTENT */}
+      {cartOpen && (
+        <>
+          <div className="flex-1 space-y-4 overflow-y-auto p-5">
+            {cart.length === 0 ? (
+              <div className="py-16 text-center">
+                <div className="text-5xl">🛒</div>
+                <h3 className="mt-4 text-lg font-bold">
+                  Your cart is empty
+                </h3>
+                <p className="mt-2 text-sm text-slate-500">
+                  Discover products and add your favourites.
+                </p>
+                <button
+                  onClick={() => setCartOpen(false)}
+                  className="mt-5 rounded-xl bg-blue-600 px-5 py-3 font-bold text-white"
+                >
+                  Continue Shopping
+                </button>
+              </div>
+            ) : (
+              cart.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex gap-4 rounded-2xl border p-3"
+                >
+                  <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-slate-100">
+                    {item.image ? (
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-3xl">
+                        📦
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-bold">{item.name}</h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      ₹{item.price.toLocaleString("en-IN")}
+                    </p>
+
+                    <div className="mt-3 flex items-center gap-3">
+                      <button
+                        onClick={() =>
+                          updateCartItem(item, item.quantity - 1)
+                        }
+                        className="h-8 w-8 rounded-lg border font-bold"
+                      >
+                        −
+                      </button>
+
+                      <span className="font-bold">
+                        {item.quantity}
+                      </span>
+
+                      <button
+                        onClick={() =>
+                          updateCartItem(item, item.quantity + 1)
+                        }
+                        disabled={item.quantity >= item.stock}
+                        className="h-8 w-8 rounded-lg border font-bold disabled:opacity-40"
+                      >
+                        +
+                      </button>
+
+                      <button
+                        onClick={() => updateCartItem(item, 0)}
+                        className="ml-auto text-xs font-semibold text-red-600"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {cart.length > 0 && (
+            <div className="space-y-3 border-t bg-slate-50 p-5">
+              <div className="flex justify-between text-lg font-extrabold">
+                <span>Subtotal</span>
+                <span>₹{cartTotal.toLocaleString("en-IN")}</span>
+              </div>
+
+              <p className="text-xs text-slate-500">
+                Delivery charges and final amount will be shown during checkout.
+              </p>
+
+              {token && (
+                <>
+                  <label className="block text-sm font-semibold">
+                    Delivery Address
+                  </label>
+
+                  <select
+                    value={selectedAddress}
+                    onChange={(event) =>
+                      setSelectedAddress(event.target.value)
+                    }
+                    className="w-full rounded-xl border bg-white p-3 text-sm"
+                  >
+                    <option value="">Select delivery address</option>
+                    {addresses.map((address) => (
+                      <option key={address.id} value={address.id}>
+                        {address.recipient} - {address.city}
+                        {address.isDefault ? " (Default)" : ""}
+                      </option>
+                    ))}
+                  </select>
+
+                  <details className="rounded-xl border bg-white p-3">
+                    <summary className="cursor-pointer text-sm font-bold">
+                      + Add a new address
+                    </summary>
+
+                    <form
+                      onSubmit={saveAddress}
+                      className="mt-3 space-y-2"
+                    >
+                      <input
+                        required
+                        value={addressForm.recipient}
+                        onChange={(event) =>
+                          setAddressForm({
+                            ...addressForm,
+                            recipient: event.target.value,
+                          })
+                        }
+                        placeholder="Recipient name"
+                        className="w-full rounded-lg border p-2 text-sm"
+                      />
+
+                      <input
+                        required
+                        value={addressForm.line1}
+                        onChange={(event) =>
+                          setAddressForm({
+                            ...addressForm,
+                            line1: event.target.value,
+                          })
+                        }
+                        placeholder="House / Street address"
+                        className="w-full rounded-lg border p-2 text-sm"
+                      />
+
+                      <input
+                        required
+                        value={addressForm.city}
+                        onChange={(event) =>
+                          setAddressForm({
+                            ...addressForm,
+                            city: event.target.value,
+                          })
+                        }
+                        placeholder="City"
+                        className="w-full rounded-lg border p-2 text-sm"
+                      />
+
+                      <input
+                        required
+                        value={addressForm.region}
+                        onChange={(event) =>
+                          setAddressForm({
+                            ...addressForm,
+                            region: event.target.value,
+                          })
+                        }
+                        placeholder="State"
+                        className="w-full rounded-lg border p-2 text-sm"
+                      />
+
+                      <input
+                        required
+                        value={addressForm.postalCode}
+                        onChange={(event) =>
+                          setAddressForm({
+                            ...addressForm,
+                            postalCode: event.target.value,
+                          })
+                        }
+                        placeholder="PIN code"
+                        className="w-full rounded-lg border p-2 text-sm"
+                      />
+
+                      <button className="w-full rounded-lg bg-slate-900 py-2 text-sm font-bold text-white">
+                        Save Address
+                      </button>
+                    </form>
+                  </details>
+                </>
+              )}
+
+              <input
+                value={couponCode}
+                onChange={(event) => setCouponCode(event.target.value)}
+                placeholder="Coupon code (optional)"
+                className="w-full rounded-xl border bg-white p-3 text-sm"
+              />
+
+              <button
+                onClick={checkout}
+                disabled={busy}
+                className="w-full rounded-xl bg-blue-600 py-3 font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {busy ? "Processing..." : "Proceed to Checkout"}
+              </button>
+
+              {!token && (
+                <p className="text-center text-xs text-slate-500">
+                  You'll be asked to sign in before checkout.
+                </p>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* WISHLIST CONTENT */}
+      {wishlistOpen && (
+        <div className="flex-1 space-y-4 overflow-y-auto p-5">
+          {wishlist.length === 0 ? (
+            <div className="py-16 text-center">
+              <div className="text-5xl">♡</div>
+              <h3 className="mt-4 text-lg font-bold">
+                Your wishlist is empty
+              </h3>
+              <p className="mt-2 text-sm text-slate-500">
+                Save products you love and find them here.
+              </p>
+              <button
+                onClick={() => setWishlistOpen(false)}
+                className="mt-5 rounded-xl bg-blue-600 px-5 py-3 font-bold text-white"
+              >
+                Explore Products
+              </button>
+            </div>
+          ) : (
+            wishlist.map((product) => (
+              <div
+                key={product.id}
+                className="flex gap-4 rounded-2xl border p-3"
+              >
+                <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-slate-100">
+                  {product.image ? (
+                    <img
+                      src={product.image}
+                      alt={product.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-3xl">
+                      📦
+                    </div>
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-bold">{product.name}</h3>
+                  <p className="mt-2 font-extrabold text-blue-700">
+                    ₹{product.price.toLocaleString("en-IN")}
+                  </p>
+
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    <button
+                      onClick={() => addToCart(product)}
+                      disabled={product.stock < 1}
+                      className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40"
+                    >
+                      Add to Cart
+                    </button>
+
+                    <button
+                      onClick={() => toggleWishlist(product)}
+                      className="text-xs font-semibold text-red-600"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </aside>
+  </div>
+)}
 
       {accountOpen && (
         <section className="fixed right-4 top-20 z-40 w-[min(92vw,440px)] rounded-2xl border bg-white p-5 shadow-xl">
@@ -562,90 +974,8 @@ useEffect(() => {
 
       {(error) && <div role="alert" className="fixed bottom-4 right-4 z-50 max-w-sm rounded-xl bg-red-50 p-4 text-sm text-red-800 shadow-lg">{error}<button className="ml-3 font-bold" onClick={() => setError("")}>×</button></div>}
 
-      <section className="mx-auto max-w-6xl px-5 py-8">
-  <h2 className="text-2xl font-extrabold">Your Shopping Cart</h2>
 
-  {cart.length === 0 ? (
-    <p className="mt-4 rounded-xl bg-white p-5 text-slate-600">
-      Your cart is empty.
-    </p>
-  ) : (
-    <div className="mt-4 space-y-3">
-      {cart.map((item) => (
-        <div
-          key={item.id}
-          className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-white p-4"
-        >
-          <div>
-            <p className="font-bold">{item.name}</p>
-            <p className="text-sm text-slate-500">
-              ₹{item.price.toLocaleString("en-IN")} each
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => updateCartItem(item, item.quantity - 1)}
-              className="rounded-lg border px-3 py-1"
-              aria-label={`Decrease ${item.name} quantity`}
-            >
-              −
-            </button>
-
-            <span className="font-semibold">{item.quantity}</span>
-
-            <button
-              type="button"
-              disabled={item.quantity >= item.stock}
-              onClick={() => updateCartItem(item, item.quantity + 1)}
-              className="rounded-lg border px-3 py-1 disabled:opacity-40"
-              aria-label={`Increase ${item.name} quantity`}
-            >
-              +
-            </button>
-
-            <button
-              type="button"
-              onClick={() => updateCartItem(item, 0)}
-              className="rounded-lg px-3 py-1 font-semibold text-red-600"
-            >
-              Remove
-            </button>
-          </div>
-
-          <p className="w-full text-right font-bold">
-            Subtotal: ₹
-            {(item.price * item.quantity).toLocaleString("en-IN")}
-          </p>
-        </div>
-      ))}
-    </div>
-  )}
-
-  <p className="mt-5 text-right text-xl font-extrabold">
-    Total: ₹{cartTotal.toLocaleString("en-IN")}
-  </p>
-  {cart.length > 0 && <div className="mt-6 rounded-2xl border bg-white p-5">
-    {user ? <>
-      <label className="block text-sm font-bold">Delivery address</label>
-      {addresses.length > 0 ? <select value={selectedAddress} onChange={(event) => setSelectedAddress(event.target.value)} className="mt-2 w-full rounded-xl border px-3 py-3 text-sm">{addresses.map((address) => <option key={address.id} value={address.id}>{address.recipient} · {address.city}, {address.region}</option>)}</select> : <p className="mt-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Add an address to continue.</p>}
-      <details className="mt-3 rounded-xl border p-3"><summary className="cursor-pointer text-sm font-bold">Add a delivery address</summary>
-        <form onSubmit={saveAddress} className="mt-3 grid gap-2 sm:grid-cols-2">
-          {([['recipient','Full name'],['line1','Street address'],['city','City'],['region','State'],['postalCode','Postal code']] as const).map(([key, label]) => <input key={key} required value={addressForm[key]} onChange={(event) => setAddressForm((current) => ({ ...current, [key]: event.target.value }))} placeholder={label} className="min-w-0 rounded-lg border px-3 py-2.5 text-sm" />)}
-          <button className="rounded-lg bg-slate-900 px-3 py-2.5 text-sm font-bold text-white sm:col-span-2">Save address</button>
-        </form>
-      </details>
-      <input value={couponCode} onChange={(event) => setCouponCode(event.target.value)} placeholder="Coupon code (optional)" className="mt-3 w-full rounded-xl border px-3 py-2.5 text-sm" />
-      <button disabled={!addresses.length} onClick={checkout} className="mt-4 w-full rounded-xl bg-indigo-600 px-5 py-3 font-bold text-white hover:bg-indigo-700 disabled:opacity-50">Continue to secure payment</button>
-    </> : <button onClick={() => setAuthOpen(true)} className="w-full rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-3 font-bold text-indigo-800">Sign in to checkout</button>}
-  </div>}
-</section>
-
-      {trendingProducts.length > 0 && <section className="mx-auto max-w-6xl px-5 pb-10">
-        <div className="mb-5"><p className="text-sm font-bold uppercase tracking-wider text-blue-700">Popular right now</p><h2 className="mt-1 text-2xl font-extrabold">Trending products</h2><p className="mt-2 text-slate-600">A mix of shopper activity and fresh catalog picks.</p></div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{trendingProducts.slice(0, 4).map((product) => <article key={product.id} className="rounded-2xl border bg-white p-4 shadow-sm"><p className="font-bold">{product.name}</p><p className="mt-1 text-sm text-slate-500">{product.reason}</p><div className="mt-3 flex items-center justify-between"><b className="text-blue-700">₹{Number(product.price).toLocaleString("en-IN")}</b><button onClick={() => addToCart(product)} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">Add</button></div></article>)}</div>
-      </section>}
+      
 
 
 
@@ -790,6 +1120,11 @@ useEffect(() => {
         )}
       </section>
 
+      {trendingProducts.length > 0 && <section className="mx-auto max-w-6xl px-5 pb-10">
+        <div className="mb-5"><p className="text-sm font-bold uppercase tracking-wider text-blue-700">Popular right now</p><h2 className="mt-1 text-2xl font-extrabold">Trending products</h2><p className="mt-2 text-slate-600">A mix of shopper activity and fresh catalog picks.</p></div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{trendingProducts.slice(0, 4).map((product) => <article key={product.id} className="rounded-2xl border bg-white p-4 shadow-sm"><p className="font-bold">{product.name}</p><p className="mt-1 text-sm text-slate-500">{product.reason}</p><div className="mt-3 flex items-center justify-between"><b className="text-blue-700">₹{Number(product.price).toLocaleString("en-IN")}</b><button onClick={() => addToCart(product)} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">Add</button></div></article>)}</div>
+      </section>}
+
       <section id="products" className="mx-auto max-w-6xl px-5 pb-16">
         <div className="mb-6">
           <h2 className="text-2xl font-extrabold sm:text-3xl">
@@ -830,7 +1165,15 @@ useEffect(() => {
             <option value="name">Name</option>
             <option value="price">Price</option>
           </select>
-          <select value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} aria-label="Sort order" className="rounded-xl border border-slate-300 bg-white px-4 py-3">
+          <select
+  value={sortOrder}
+  onChange={(event) => {
+    setSortOrder(event.target.value);
+    setPage(1);
+  }}
+  aria-label="Sort order"
+  className="rounded-xl border border-slate-300 bg-white px-4 py-3"
+>
             <option value="asc">Ascending</option><option value="desc">Descending</option>
           </select>
         </div>
@@ -853,8 +1196,12 @@ useEffect(() => {
                 key={product.id}
                 className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
               >
-                <div className="flex h-44 items-center justify-center bg-gradient-to-br from-slate-100 to-blue-100 text-7xl">
-                  {product.image ? <img src={product.image} alt={product.name} className="h-full w-full object-cover" /> : productEmojis[product.name] || "📦"}
+                <div className="flex h-52 w-full items-center justify-center overflow-hidden rounded-t-xl bg-white p-2">
+                  {product.image ? <img
+  src={product.image}
+  alt={product.name}
+  className="h-full w-full object-contain p-3"
+/> : productEmojis[product.name] || "📦"}
                 </div>
 
                 <div className="p-5">
@@ -891,11 +1238,18 @@ useEffect(() => {
             ))}
           </div>
         )}
-        <div className="mt-8 flex items-center justify-center gap-3">
-          <button disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} className="rounded-lg border bg-white px-4 py-2 text-sm font-semibold disabled:opacity-40">Previous</button>
-          <span className="rounded-lg bg-white px-4 py-2 text-sm font-bold">Page {page} of {totalPages}</span>
-          <button disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))} className="rounded-lg border bg-white px-4 py-2 text-sm font-semibold disabled:opacity-40">Next</button>
-        </div>
+       {page < totalPages && !loading && (
+  <div className="mt-10 flex justify-center">
+    <button
+      type="button"
+      onClick={() => setPage((current) => current + 1)}
+      disabled={loadingMore}
+      className="rounded-xl bg-slate-900 px-8 py-3 font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {loadingMore ? "Loading products..." : "Load More Products"}
+    </button>
+  </div>
+)}
       </section>
 
       <footer className="border-t bg-white px-5 py-6 text-center text-sm text-slate-500">
